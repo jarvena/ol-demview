@@ -1,0 +1,4 @@
+[ZoneTransfer]
+ZoneId=3
+ReferrerUrl=https://beta-karttakuva.maanmittauslaitos.fi/
+HostUrl=https://avoin-karttakuva.maanmittauslaitos.fi/ortokuvat-ja-korkeusmallit/wcs/v2?api-key=7cd2ddae-9f2e-481c-99d0-404e7bc7a0b2&service=WCS&version=2.0.1&request=GetCoverage&CoverageID=ortokuva_vari&SUBSET=E(300355.8343768743,301596.72939740395)&SUBSET=N(7008051.186383797,7009188.341934527)&SUBSET=time(%222012-12-31T02:00:00Z%22)&format=image/tiff&
