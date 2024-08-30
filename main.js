@@ -2,7 +2,8 @@ import './style.css';
 import { Map, View } from 'ol';
 import { Image as ImageLayer, Tile as TileLayer} from 'ol/layer';
 import WebGLTileLayer from 'ol/layer/WebGLTile.js';
-import { XYZ, Raster as RasterSource, OSM, GeoTIFF, ImageWMS, TileWMS } from 'ol/source';
+import { XYZ, Raster as RasterSource, OSM, GeoTIFF, ImageWMS, TileWMS, WMTS } from 'ol/source';
+import WMTSTileGrid from 'ol/tilegrid/WMTS.js';
 
 import proj4 from 'proj4';
 import {register} from 'ol/proj/proj4.js';
@@ -71,12 +72,6 @@ raster.on('afteroperations', (event) => {
   }
 );
 
-// const sampleTiff = new GeoTIFF({
-//   sources: [{
-//     url: './ortho_3857.tif'
-//   }]
-// });
-
 const sampleTiff = new GeoTIFF({
   sources: [{
     url: './P3344E_3857.tif',
@@ -87,15 +82,23 @@ const sampleTiff = new GeoTIFF({
   normalize: true,
 });
 
-console.log(sampleTiff)
+//https://avoin-karttakuva.maanmittauslaitos.fi/avoin/wmts/1.0.0/maastokartta/default/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png
+const maastokarttaSource = new WMTS({
+  url: 'https://avoin-karttakuva.maanmittauslaitos.fi/avoin/wmts/',
+  layer: 'maastokartta',
+  matrixSet: 'ETRS-TM35FIN',
+  projection: 'EPSG:3067',
+  format: 'image/png?api-key=02ec4999-f9a5-4e20-905e-bdfc5b8da7d4',
+  tileGrid: new WMTSTileGrid({
+    extent: [-548576.000000,6291456.000000,1548576.000000,8388608.000000],
+    resolutions: [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5],
+    matrixIds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+  }),
+  //  //maxExtent: 
+  style: 'default',
+});
 
-// const orthoTiff = new GeoTIFF({
-//   sources: [{
-//     url: './ortho.tif'
-//   }],
-//   projection: 'EPSG:3067',
-//   normalize: true
-// });
+console.log(sampleTiff)
 
 // const wcsSource = new ImageWMS({
 //   url: 'https://avoin-karttakuva.maanmittauslaitos.fi/ortokuvat-ja-korkeusmallit/wcs/v2?api-key=7cd2ddae-9f2e-481c-99d0-404e7bc7a0b2&service=WCS&version=2.0.1',
@@ -116,6 +119,9 @@ const map = new Map({
   layers: [
     new TileLayer({
       source: new OSM()
+    }),
+    new TileLayer({
+      source: maastokarttaSource
     }),
     new ImageLayer({
       source: raster,
@@ -146,5 +152,7 @@ const map = new Map({
   view: new View({
     center: [2566000, 9138000],
     zoom: 14
+    //center: [300000, 7005000],
+    //projection: 'EPSG:3067'
   })
 });
