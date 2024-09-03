@@ -18,6 +18,18 @@ const elevation = new XYZ({
   interpolate: false,
 });
 
+const elevation3067 = new XYZ({
+  url: './tiles3067/{z}/{x}/{-y}.png',
+  maxZoom: 12,
+  interpolate: false,
+  projection: 'EPSG:3067',
+  tileGrid: new WMTSTileGrid({ //JHS180 TM35FIN tilegrid
+    extent: [-548576.000000,6291456.000000,1548576.000000,8388608.000000],
+    resolutions: [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5],
+    matrixIds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+  }),
+});
+
 const decodeElevation = ([R, G, B]) => {
   return -10000 + ((R * 256 * 256 + G * 256 + B) * 0.1);
 };
@@ -51,8 +63,8 @@ const raster = new RasterSource({
   }
 });
 
-raster.set('dataMax', 0);
-raster.set('displayMax', 0);
+raster.set('dataMax', -1000);
+raster.set('displayMax', -1000);
 raster.set('dataMin', 1000);
 raster.set('displayMin', 1000);
 
@@ -67,6 +79,7 @@ raster.on('afteroperations', (event) => {
     if ((event.data.dataMax !== event.data.displayMax) || (event.data.dataMin !== event.data.displayMin)) {
       raster.set('displayMax', event.data.dataMax);
       raster.set('displayMin', event.data.dataMin);
+      console.log('max:', event.data.dataMax, 'vs', event.data.displayMax, 'min:', event.data.dataMin, 'vs', event.data.displayMin);
       raster.refresh();
     }
   }
@@ -126,6 +139,9 @@ const map = new Map({
     new ImageLayer({
       source: raster,
     }),
+    new TileLayer({
+      source: elevation3067
+    }),
     
     // new WebGLTileLayer({
     //   source: orthoTiff
@@ -150,9 +166,9 @@ const map = new Map({
     })
   ],
   view: new View({
-    center: [2566000, 9138000],
-    zoom: 14
-    //center: [300000, 7005000],
-    //projection: 'EPSG:3067'
+    //center: [2566000, 9138000],
+    zoom: 14,
+    center: [300000, 7005000],
+    projection: 'EPSG:3067'
   })
 });
