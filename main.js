@@ -38,6 +38,7 @@ const scaleElevation = (elevation, min, max) => {
   return ((elevation - min) / (max - min)) * 255
 }
 
+// Use pixel operation for dynamic color
 const raster = new RasterSource({
   sources: [elevation],
   operation: (pixels, data) => {
@@ -63,10 +64,10 @@ const raster = new RasterSource({
   }
 });
 
-raster.set('dataMax', -1000);
-raster.set('displayMax', -1000);
-raster.set('dataMin', 1000);
-raster.set('displayMin', 1000);
+raster.set('dataMax', -10000);
+raster.set('displayMax', -10000);
+raster.set('dataMin', 1667721.5);
+raster.set('displayMin', 1667721.5);
 
 raster.on('beforeoperations', (event) => {
   event.data.dataMax = 0;
@@ -79,11 +80,60 @@ raster.on('afteroperations', (event) => {
     if ((event.data.dataMax !== event.data.displayMax) || (event.data.dataMin !== event.data.displayMin)) {
       raster.set('displayMax', event.data.dataMax);
       raster.set('displayMin', event.data.dataMin);
-      console.log('max:', event.data.dataMax, 'vs', event.data.displayMax, 'min:', event.data.dataMin, 'vs', event.data.displayMin);
       raster.refresh();
     }
   }
 );
+
+// Use image operation for dynamic coloring
+const raster3067 = new RasterSource({
+  sources: [elevation3067],
+  operationType: 'image',
+  operation: (imageData, data) => {
+    const elevationImage = imageData[0].data;
+    const pixelCount = imageData[0].width * imageData[0].height;
+    let pixel, elevation, pixelValue;
+    const elevationData = new Array(pixelCount)
+    let minE = 1667721.5, maxE = -10000;
+    for (let i = 0; i < pixelCount; i++) {
+      pixel = elevationImage.slice(i*4, i*4+4);
+      if (pixel[3] === 0) {
+        elevationData[i] = -10000;
+        continue;
+      }
+      elevationData[i] = decodeElevation(pixel.slice(0, 3));
+      if (elevationData[i] === -10000) {
+        continue;
+      }
+      if (elevationData[i] > maxE) {
+        maxE = elevationData[i];
+      }
+      if (elevationData[i] < minE) {
+        minE = elevationData[i];
+      }
+    }
+    const elevationDisplayData = new Uint8ClampedArray(elevationImage.length);
+    for (let i = 0; i < pixelCount; i++) {
+      if (elevationData[i] === -10000) {
+        elevationDisplayData[i*4] = 0;
+        elevationDisplayData[i*4+1] = 0;
+        elevationDisplayData[i*4+2] = 0;
+        elevationDisplayData[i*4+3] = 0;
+        continue;
+      }
+      pixelValue = scaleElevation(elevationData[i], minE, maxE);
+      elevationDisplayData[i*4] = pixelValue;
+      elevationDisplayData[i*4+1] = pixelValue;
+      elevationDisplayData[i*4+2] = pixelValue;
+      elevationDisplayData[i*4+3] = 255;
+    }
+    return {data: elevationDisplayData, width: imageData.width, height: imageData.height}
+  },
+  lib: {
+    decodeElevation: decodeElevation,
+    scaleElevation: scaleElevation,
+  }
+});
 
 const sampleTiff = new GeoTIFF({
   sources: [{
@@ -111,7 +161,6 @@ const maastokarttaSource = new WMTS({
   style: 'default',
 });
 
-console.log(sampleTiff)
 
 // const wcsSource = new ImageWMS({
 //   url: 'https://avoin-karttakuva.maanmittauslaitos.fi/ortokuvat-ja-korkeusmallit/wcs/v2?api-key=7cd2ddae-9f2e-481c-99d0-404e7bc7a0b2&service=WCS&version=2.0.1',
@@ -130,17 +179,23 @@ console.log(sampleTiff)
 const map = new Map({
   target: 'map',
   layers: [
-    new TileLayer({
-      source: new OSM()
-    }),
+    // new TileLayer({
+    //   source: new OSM()
+    // }),
     new TileLayer({
       source: maastokarttaSource
     }),
+    // new TileLayer({ // Display the raw rgb dem tiles
+    //   source: elevation
+    // }),
     new ImageLayer({
       source: raster,
     }),
-    new TileLayer({
-      source: elevation3067
+    // new TileLayer({ // Display the raw rgb dem tiles
+    //   source: elevation3067
+    // }),
+    new ImageLayer({
+      source: raster3067,
     }),
     
     // new WebGLTileLayer({
