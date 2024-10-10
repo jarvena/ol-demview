@@ -12,24 +12,7 @@ import {get as getProjection} from 'ol/proj';
 proj4.defs("EPSG:3067","+proj=utm +zone=35 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
 register(proj4);
 
-const elevation = new XYZ({
-  url: './tiles/{z}/{x}/{y}.png',
-  maxZoom: 15,
-  interpolate: false,
-});
-
-const elevation3067 = new XYZ({
-  url: './tiles3067/{z}/{x}/{-y}.png',
-  maxZoom: 12,
-  interpolate: false,
-  projection: 'EPSG:3067',
-  tileGrid: new WMTSTileGrid({ //JHS180 TM35FIN tilegrid
-    extent: [-548576.000000,6291456.000000,1548576.000000,8388608.000000],
-    resolutions: [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5],
-    matrixIds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-  }),
-});
-
+// Apufunktioita rgb-enkoodatun korkeustiedon käsittelyyn (https://documentation.maptiler.com/hc/en-us/articles/4405444055313-RGB-Terrain-by-MapTiler)
 const decodeElevation = ([R, G, B]) => {
   return -10000 + ((R * 256 * 256 + G * 256 + B) * 0.1);
 };
@@ -38,7 +21,14 @@ const scaleElevation = (elevation, min, max) => {
   return ((elevation - min) / (max - min)) * 255
 }
 
-// Use pixel operation for dynamic color
+
+// Dynaaminen värjäys parsien min/max-arvot pikseleittäin. Käytä mieluummin kuvaoperaatiota!
+const elevation = new XYZ({
+  url: './tiles/{z}/{x}/{y}.png',
+  maxZoom: 15,
+  interpolate: false,
+});
+
 const raster = new RasterSource({
   sources: [elevation],
   operation: (pixels, data) => {
@@ -85,8 +75,20 @@ raster.on('afteroperations', (event) => {
   }
 );
 
-// Use image operation for dynamic coloring
-const raster3067 = new RasterSource({
+// Dynaaminen värjäys parsien min/max-arvot näkyvästä kuvasta
+const elevation3067 = new XYZ({
+  url: './tiles3067/{z}/{x}/{-y}.png',
+  maxZoom: 12,
+  interpolate: false,
+  projection: 'EPSG:3067',
+  tileGrid: new WMTSTileGrid({ //JHS180 TM35FIN tilegrid
+    extent: [-548576.000000,6291456.000000,1548576.000000,8388608.000000],
+    resolutions: [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5],
+    matrixIds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+  }),
+});
+
+const raster3067 = new RasterSource({ // HUOMIO! Tämä hoitaa värjäyksen dynaamisuuden
   sources: [elevation3067],
   operationType: 'image',
   operation: (imageData, data) => {
@@ -135,13 +137,25 @@ const raster3067 = new RasterSource({
   }
 });
 
-const sampleTiff = new GeoTIFF({
+// const sampleTiff = new GeoTIFF({
+//   sources: [{
+//     url: './P3344E_3857.tif',
+//     min: 25,
+//     max: 82,
+//     nodata: -9999
+//   }],
+//   normalize: true,
+// });
+
+// Geotiff kuvan staattinen esitys
+const sampleTiff = new GeoTIFF({ // HUOMIO!! Tämä palikka hoitaa geotiff haun palvelimelta
   sources: [{
-    url: './P3344E_3857.tif',
+    url: './P3344Ecog.tif',
     min: 25,
     max: 82,
     nodata: -9999
   }],
+  projection: 'EPSG:3067',
   normalize: true,
 });
 
@@ -179,9 +193,9 @@ const maastokarttaSource = new WMTS({
 const map = new Map({
   target: 'map',
   layers: [
-    // new TileLayer({
-    //   source: new OSM()
-    // }),
+    new TileLayer({
+      source: new OSM()
+    }),
     new TileLayer({
       source: maastokarttaSource
     }),
@@ -215,7 +229,7 @@ const map = new Map({
     // }),
     new WebGLTileLayer({
       source: sampleTiff,
-      style: {
+      style: { // HUOMIO!! Tyylillä saadaan värjättyä geotiff, esim rgb enkoodatuksi
         color: ['interpolate', ['linear'], ['band', 1], 0, '#000082', 0.2, '#3bd429', 0.4, '#e6e632', 0.6, '#784614', 0.8, '#c6b19c',  1, '#ffffff']
       }
     })
