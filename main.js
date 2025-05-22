@@ -7,7 +7,7 @@ import WMTSTileGrid from 'ol/tilegrid/WMTS.js';
 
 import proj4 from 'proj4';
 import {register} from 'ol/proj/proj4.js';
-import {get as getProjection} from 'ol/proj';
+import {get, get as getProjection} from 'ol/proj';
 
 proj4.defs("EPSG:3067","+proj=utm +zone=35 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
 register(proj4);
@@ -151,29 +151,40 @@ const raster3067 = new RasterSource({ // HUOMIO! Tämä hoitaa värjäyksen dyna
 const sampleTiff = new GeoTIFF({ // HUOMIO!! Tämä palikka hoitaa geotiff haun palvelimelta
   sources: [{
     url: './P3344Ecog.tif',
-    min: 25,
-    max: 82,
+    // min: 25,
+    // max: 82,
     nodata: -9999
   }],
   projection: 'EPSG:3067',
-  normalize: true,
+  normalize: false,
 });
 
 //https://avoin-karttakuva.maanmittauslaitos.fi/avoin/wmts/1.0.0/maastokartta/default/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png
-const maastokarttaSource = new WMTS({
-  url: 'https://avoin-karttakuva.maanmittauslaitos.fi/avoin/wmts/',
-  layer: 'maastokartta',
-  matrixSet: 'ETRS-TM35FIN',
-  projection: 'EPSG:3067',
-  format: 'image/png?api-key=02ec4999-f9a5-4e20-905e-bdfc5b8da7d4',
-  tileGrid: new WMTSTileGrid({
-    extent: [-548576.000000,6291456.000000,1548576.000000,8388608.000000],
-    resolutions: [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5],
-    matrixIds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-  }),
-  //  //maxExtent: 
-  style: 'default',
-});
+// const maastokarttaSource = new WMTS({
+//   url: 'https://avoin-karttakuva.maanmittauslaitos.fi/avoin/wmts/',
+//   layer: 'maastokartta',
+//   matrixSet: 'ETRS-TM35FIN',
+//   projection: 'EPSG:3067',
+//   format: 'image/png?api-key=22ac2f41-a8f4-4148-b025-42d9c9897150',
+//   tileGrid: new WMTSTileGrid({
+//     extent: [-548576.000000,6291456.000000,1548576.000000,8388608.000000],
+//     resolutions: [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5],
+//     matrixIds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+//   }),
+//   //  //maxExtent: 
+//   style: 'default',
+// });
+
+// const korkeusTiff = new GeoTIFF({ // HUOMIO!! Tämä palikka hoitaa geotiff haun palvelimelta
+//   sources: [{
+//     url: 'https://latuviitta.kapsi.fi/data/dem10m/dem10.tif',
+//     min: 25,
+//     max: 82,
+//     nodata: -9999
+//   }],
+//   projection: 'EPSG:3067',
+//   normalize: true,
+// });
 
 
 // const wcsSource = new ImageWMS({
@@ -190,15 +201,164 @@ const maastokarttaSource = new WMTS({
 //   }
 // });
 
+const vinovaloLayer = new TileLayer({
+  title: "Maastonmuodot",
+  source: new XYZ({
+      attribution: "Trailmap.fi",
+      url: 'https://static.trailmap.fi/varjomap/{z}/{x}/{y}.png',
+      maxzoom: 14
+  })
+})
+
+// vinovaloLayer.on('prerender', (event) => {
+//   const ctx = event.context;
+//   ctx.globalCompositeOperation = 'normal';
+// });
+
+// vinovaloLayer.on('postrender', (event) => {
+//   const ctx = event.context;
+//   ctx.globalCompositeOperation = 'normal';
+// });
+
+const dynamicTile = new WebGLTileLayer({
+  source: sampleTiff,
+})
+const dynamicSource = new RasterSource({
+  sources: [dynamicTile], 
+  operationType: 'image',
+  operation: (imageData, data) => {
+    const elevationImage = imageData[0].data;
+    const pixelCount = imageData[0].width * imageData[0].height;
+    let pixel, elevation, pixelValue;
+    const elevationData = new Array(pixelCount)
+    let minE = 1667721.5, maxE = -10000;
+    console.log('elevationImage', elevationImage)
+    
+    // Korkeusarvojen purkaminen ja minimi- ja maksimiarvojen määrittäminen
+    for (let i = 0; i < pixelCount; i++) {
+      pixel = elevationImage.slice(i*4, i*4+4);
+      if (pixel[3] === 0) { // NoData-arvo
+        elevationData[i] = -10000;
+        continue;
+      }
+      elevationData[i] = decodeElevation(pixel.slice(0, 3));
+      if (elevationData[i] === -10000) {
+        continue;
+      }
+      if (elevationData[i] > maxE) {
+        maxE = elevationData[i];
+      }
+      if (elevationData[i] < minE) {
+        minE = elevationData[i];
+      }
+    }
+    
+    // Väriarvot, 14 eri luokkaa
+    const colors = [
+      [0, 64, 128],   
+      [0, 128, 128],  
+      [0, 160, 64],   
+      [0, 176, 64],   
+      [0, 192, 64],   
+      [64, 192, 64],  
+      [128, 192, 64], 
+      [160, 192, 32], 
+      [192, 192, 32], 
+      [224, 160, 0],  
+      [255, 128, 0],  
+      [255, 64, 0],   
+      [255, 32, 0],   
+      [255, 0, 0]     
+    ];
+
+    // Korkeusarvot luokkiin ja värit interpolointiin
+    const elevationDisplayData = new Uint8ClampedArray(elevationImage.length);
+    for (let i = 0; i < pixelCount; i++) {
+      elevationDisplayData[i*4] = elevationImage[i*4];
+      elevationDisplayData[i*4+1] = elevationImage[i*4+1];
+      elevationDisplayData[i*4+2] = elevationImage[i*4+2];
+      elevationDisplayData[i*4+3] = elevationImage[i*4+3];
+      continue
+      if (elevationData[i] === -10000) {
+        elevationDisplayData[i*4] = 0;  // Musta väri, jos NoData
+        elevationDisplayData[i*4+1] = 0;
+        elevationDisplayData[i*4+2] = 0;
+        elevationDisplayData[i*4+3] = 0;
+        continue;
+      }
+
+      // Korkeusarvon normalisointi välillä 0-1
+      const normalizedElevation = (elevationData[i] - minE) / (maxE - minE);
+
+      // Löydetään oikea luokka
+      const classIndex = Math.min(Math.floor(normalizedElevation * 14), 13);  // 14 luokkaa (0-13)
+
+      // Interpoloidaan värit luokkien välillä
+      const lowerClass = classIndex;
+      const upperClass = Math.min(classIndex + 1, 13);
+      const lowerColor = colors[lowerClass];
+      const upperColor = colors[upperClass];
+
+      // Interpoloidaan värit
+      debugger
+      const weight = normalizedElevation * 14 - classIndex;
+      const red = Math.round(lowerColor[0] * (1 - weight) + upperColor[0] * weight);
+      const green = Math.round(lowerColor[1] * (1 - weight) + upperColor[1] * weight);
+      const blue = Math.round(lowerColor[2] * (1 - weight) + upperColor[2] * weight);
+
+      // Tallennetaan värit pikseliin
+      elevationDisplayData[i*4] = red;
+      elevationDisplayData[i*4+1] = green;
+      elevationDisplayData[i*4+2] = blue;
+      elevationDisplayData[i*4+3] = 255; // Täysi läpinäkyvyys
+    }
+
+    return {data: elevationDisplayData, width: imageData.width, height: imageData.height};
+  },
+  lib: {
+    decodeElevation: decodeElevation,
+    scaleElevation: scaleElevation,
+  }
+});
+const dynamicLayer = new ImageLayer({
+  source: dynamicSource,
+  visible: true,
+})
+
+const getColorSteps = (min, max, steps) => {
+  const vars = {}
+  for (let i = 0; i < steps; i++) {
+    const step = min + (max - min) * (i / (steps - 1));
+    vars[`step${i}`] = step;
+  }
+  return vars
+}
+
+const tiffLayer = new WebGLTileLayer({
+  source: sampleTiff,
+  style: { // HUOMIO!! Tyylillä saadaan värjättyä geotiff, esim rgb enkoodatuksi
+    color: ['interpolate', ['linear'], ['band', 1], ['var', 'step0'], '#000082', ['var', 'step1'], '#3bd429', ['var', 'step2'], '#e6e632', ['var', 'step3'], '#784614', ['var', 'step4'], '#c6b19c',  ['var', 'step5'], '#ffffff'],
+    variables: getColorSteps(25, 82, 6),
+  }
+})
+
+// tiffLayer.on('postrender', (event) => {
+//   tiffLayer.getData().then((data) => {
+//     console.log(data)
+//   })
+// })
+
+
+
 const map = new Map({
   target: 'map',
   layers: [
     new TileLayer({
       source: new OSM()
     }),
-    new TileLayer({
-      source: maastokarttaSource
-    }),
+    // new TileLayer({
+    //   source: maastokarttaSource
+    // }),
     // new TileLayer({ // Display the raw rgb dem tiles
     //   source: elevation
     // }),
@@ -211,7 +371,6 @@ const map = new Map({
     new ImageLayer({
       source: raster3067,
     }),
-    
     // new WebGLTileLayer({
     //   source: orthoTiff
     // }),
@@ -227,17 +386,58 @@ const map = new Map({
     // new ImageLayer({
     //   source: wcsSource
     // }),
-    new WebGLTileLayer({
-      source: sampleTiff,
-      style: { // HUOMIO!! Tyylillä saadaan värjättyä geotiff, esim rgb enkoodatuksi
-        color: ['interpolate', ['linear'], ['band', 1], 0, '#000082', 0.2, '#3bd429', 0.4, '#e6e632', 0.6, '#784614', 0.8, '#c6b19c',  1, '#ffffff']
-      }
-    })
+    tiffLayer,
+    // new WebGLTileLayer({
+    //   source: korkeusTiff,
+    //   style: { // HUOMIO!! Tyylillä saadaan värjättyä geotiff, esim rgb enkoodatuksi
+    //     color: ['interpolate', ['linear'], ['band', 1], 25, '#000082', 35, '#3bd429', 45, '#e6e632', 55, '#784614', 65, '#c6b19c',  82, '#ffffff']
+    //   }
+    // }),
+    //vinovaloLayer,
+    //dynamicLayer,
   ],
   view: new View({
     //center: [2566000, 9138000],
     zoom: 14,
-    center: [300000, 7005000],
+    center: [300000, 6993000],
     projection: 'EPSG:3067'
   })
 });
+
+map.on('click', (event) => {
+  console.log(event.coordinate)
+  console.log('extent', tiffLayer.getExtent())
+  console.log(tiffLayer.getData(event.pixel))
+})
+
+const getVisibleMinMax = () => {
+  const mapSize = map.getSize();
+  if (!mapSize || mapSize[0] === 0 || mapSize[1] === 0) {
+    return;
+  }
+  let min = Infinity;
+  let max = -Infinity;
+  const decimationStep = 10
+  for (let x = 0; x < mapSize[0]; x += decimationStep) {
+    for (let y = 0; y < mapSize[1]; y += decimationStep) {
+      const pixel = [x, y];
+      const data = tiffLayer.getData(pixel);
+      if (data) {
+        min = Math.min(min, data[0]);
+        max = Math.max(max, data[0]);
+      }
+    }
+  }
+  if (min < max) {
+    tiffLayer.updateStyleVariables(getColorSteps(min, max, 6));
+  }
+}
+
+// map.on('moveend', (event) => {
+//   tiffLayer.once('prerender', (event) => {
+//     getVisibleMinMax()
+//   })
+// })
+tiffLayer.on('prerender', (event) => {
+    getVisibleMinMax()
+  })
