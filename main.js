@@ -4,6 +4,7 @@ import { Image as ImageLayer, Tile as TileLayer} from 'ol/layer';
 import WebGLTileLayer from 'ol/layer/WebGLTile.js';
 import { XYZ, Raster as RasterSource, OSM, GeoTIFF, ImageWMS, TileWMS, WMTS } from 'ol/source';
 import WMTSTileGrid from 'ol/tilegrid/WMTS.js';
+import Link from 'ol/interaction/Link.js';
 
 import proj4 from 'proj4';
 import {register} from 'ol/proj/proj4.js';
@@ -23,134 +24,74 @@ const scaleElevation = (elevation, min, max) => {
 
 
 // Dynaaminen värjäys parsien min/max-arvot pikseleittäin. Käytä mieluummin kuvaoperaatiota!
-const elevation = new XYZ({
-  url: './tiles/{z}/{x}/{y}.png',
-  maxZoom: 15,
-  interpolate: false,
-});
-
-const raster = new RasterSource({
-  sources: [elevation],
-  operation: (pixels, data) => {
-    if (pixels[3] === 0) {
-      return [0, 0, 0, 0];
-    }
-    const elevation = decodeElevation(pixels[0].slice(0, 3));
-    if (elevation === -10000) {
-      return [0, 0, 0, 0];
-    }
-    if (elevation > data.dataMax) {
-      data.dataMax = elevation;
-    }
-    if (elevation < data.dataMin) {
-      data.dataMin = elevation;
-    }
-    const v = scaleElevation(elevation, data.displayMin, data.displayMax)
-    return [v, v, v, 255];
-  },
-  lib: {
-    decodeElevation: decodeElevation,
-    scaleElevation: scaleElevation,
-  }
-});
-
-raster.set('dataMax', -10000);
-raster.set('displayMax', -10000);
-raster.set('dataMin', 1667721.5);
-raster.set('displayMin', 1667721.5);
-
-raster.on('beforeoperations', (event) => {
-  event.data.dataMax = 0;
-  event.data.dataMin = 1000;
-  event.data.displayMax = raster.get('displayMax');
-  event.data.displayMin = raster.get('displayMin');
-});
-
-raster.on('afteroperations', (event) => {
-    if ((event.data.dataMax !== event.data.displayMax) || (event.data.dataMin !== event.data.displayMin)) {
-      raster.set('displayMax', event.data.dataMax);
-      raster.set('displayMin', event.data.dataMin);
-      raster.refresh();
-    }
-  }
-);
-
-// Dynaaminen värjäys parsien min/max-arvot näkyvästä kuvasta
-const elevation3067 = new XYZ({
-  url: './tiles3067/{z}/{x}/{-y}.png',
-  maxZoom: 12,
-  interpolate: false,
-  projection: 'EPSG:3067',
-  tileGrid: new WMTSTileGrid({ //JHS180 TM35FIN tilegrid
-    extent: [-548576.000000,6291456.000000,1548576.000000,8388608.000000],
-    resolutions: [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5],
-    matrixIds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-  }),
-});
-
-const raster3067 = new RasterSource({ // HUOMIO! Tämä hoitaa värjäyksen dynaamisuuden
-  sources: [elevation3067],
-  operationType: 'image',
-  operation: (imageData, data) => {
-    const elevationImage = imageData[0].data;
-    const pixelCount = imageData[0].width * imageData[0].height;
-    let pixel, elevation, pixelValue;
-    const elevationData = new Array(pixelCount)
-    let minE = 1667721.5, maxE = -10000;
-    for (let i = 0; i < pixelCount; i++) {
-      pixel = elevationImage.slice(i*4, i*4+4);
-      if (pixel[3] === 0) {
-        elevationData[i] = -10000;
-        continue;
-      }
-      elevationData[i] = decodeElevation(pixel.slice(0, 3));
-      if (elevationData[i] === -10000) {
-        continue;
-      }
-      if (elevationData[i] > maxE) {
-        maxE = elevationData[i];
-      }
-      if (elevationData[i] < minE) {
-        minE = elevationData[i];
-      }
-    }
-    const elevationDisplayData = new Uint8ClampedArray(elevationImage.length);
-    for (let i = 0; i < pixelCount; i++) {
-      if (elevationData[i] === -10000) {
-        elevationDisplayData[i*4] = 0;
-        elevationDisplayData[i*4+1] = 0;
-        elevationDisplayData[i*4+2] = 0;
-        elevationDisplayData[i*4+3] = 0;
-        continue;
-      }
-      pixelValue = scaleElevation(elevationData[i], minE, maxE);
-      elevationDisplayData[i*4] = pixelValue;
-      elevationDisplayData[i*4+1] = pixelValue;
-      elevationDisplayData[i*4+2] = pixelValue;
-      elevationDisplayData[i*4+3] = 255;
-    }
-    return {data: elevationDisplayData, width: imageData.width, height: imageData.height}
-  },
-  lib: {
-    decodeElevation: decodeElevation,
-    scaleElevation: scaleElevation,
-  }
-});
-
-// const sampleTiff = new GeoTIFF({
-//   sources: [{
-//     url: './P3344E_3857.tif',
-//     min: 25,
-//     max: 82,
-//     nodata: -9999
-//   }],
-//   normalize: true,
+// const elevation = new XYZ({
+//   url: './tiles/{z}/{x}/{y}.png',
+//   maxZoom: 15,
+//   interpolate: false,
 // });
 
-// Geotiff kuvan staattinen esitys
-const sampleTiff = new GeoTIFF({ // HUOMIO!! Tämä palikka hoitaa geotiff haun palvelimelta
+// const raster = new RasterSource({
+//   sources: [elevation],
+//   operation: (pixels, data) => {
+//     if (pixels[3] === 0) {
+//       return [0, 0, 0, 0];
+//     }
+//     const elevation = decodeElevation(pixels[0].slice(0, 3));
+//     if (elevation === -10000) {
+//       return [0, 0, 0, 0];
+//     }
+//     if (elevation > data.dataMax) {
+//       data.dataMax = elevation;
+//     }
+//     if (elevation < data.dataMin) {
+//       data.dataMin = elevation;
+//     }
+//     const v = scaleElevation(elevation, data.displayMin, data.displayMax)
+//     return [v, v, v, 255];
+//   },
+//   lib: {
+//     decodeElevation: decodeElevation,
+//     scaleElevation: scaleElevation,
+//   }
+// });
+
+// raster.set('dataMax', -10000);
+// raster.set('displayMax', -10000);
+// raster.set('dataMin', 1667721.5);
+// raster.set('displayMin', 1667721.5);
+
+// raster.on('beforeoperations', (event) => {
+//   event.data.dataMax = 0;
+//   event.data.dataMin = 1000;
+//   event.data.displayMax = raster.get('displayMax');
+//   event.data.displayMin = raster.get('displayMin');
+// });
+
+// raster.on('afteroperations', (event) => {
+//     if ((event.data.dataMax !== event.data.displayMax) || (event.data.dataMin !== event.data.displayMin)) {
+//       raster.set('displayMax', event.data.dataMax);
+//       raster.set('displayMin', event.data.dataMin);
+//       raster.refresh();
+//     }
+//   }
+// );
+
+// Dynaaminen värjäys parsien min/max-arvot näkyvästä kuvasta
+// const elevation3067 = new XYZ({
+//   url: './tiles3067/{z}/{x}/{-y}.png',
+//   maxZoom: 12,
+//   interpolate: false,
+//   projection: 'EPSG:3067',
+//   tileGrid: new WMTSTileGrid({ //JHS180 TM35FIN tilegrid
+//     extent: [-548576.000000,6291456.000000,1548576.000000,8388608.000000],
+//     resolutions: [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5],
+//     matrixIds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+//   }),
+// });
+
+const U4333GTiff = new GeoTIFF({ // HUOMIO!! Tämä palikka hoitaa geotiff haun palvelimelta
   sources: [{
-    url: './P3344Ecog.tif',
+    url: './U4333Gcog.tif',
     // min: 25,
     // max: 82,
     nodata: -9999
@@ -159,80 +100,123 @@ const sampleTiff = new GeoTIFF({ // HUOMIO!! Tämä palikka hoitaa geotiff haun 
   normalize: false,
 });
 
-//https://avoin-karttakuva.maanmittauslaitos.fi/avoin/wmts/1.0.0/maastokartta/default/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png
-// const maastokarttaSource = new WMTS({
-//   url: 'https://avoin-karttakuva.maanmittauslaitos.fi/avoin/wmts/',
-//   layer: 'maastokartta',
-//   matrixSet: 'ETRS-TM35FIN',
-//   projection: 'EPSG:3067',
-//   format: 'image/png?api-key=22ac2f41-a8f4-4148-b025-42d9c9897150',
-//   tileGrid: new WMTSTileGrid({
-//     extent: [-548576.000000,6291456.000000,1548576.000000,8388608.000000],
-//     resolutions: [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5],
-//     matrixIds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-//   }),
-//   //  //maxExtent: 
-//   style: 'default',
-// });
+const U4334GTiff = new GeoTIFF({
+  sources: [{
+    url: './U4334Gcog.tif',
+    // min: 25,
+    // max: 82,
+    nodata: -9999
+  }],
+  projection: 'EPSG:3067',
+  normalize: false,
+});
 
-// const korkeusTiff = new GeoTIFF({ // HUOMIO!! Tämä palikka hoitaa geotiff haun palvelimelta
-//   sources: [{
-//     url: 'https://latuviitta.kapsi.fi/data/dem10m/dem10.tif',
-//     min: 25,
-//     max: 82,
-//     nodata: -9999
-//   }],
-//   projection: 'EPSG:3067',
-//   normalize: true,
-// });
+const U5111CTiff = new GeoTIFF({
+  sources: [{
+    url: './U5111Ccog.tif',
+    // min: 25,
+    // max: 82,
+    nodata: -9999
+  }],
+  projection: 'EPSG:3067',
+  normalize: false,
+});
 
+const U5112CTiff = new GeoTIFF({
+  sources: [{
+    url: './U5112Ccog.tif',
+    // min: 25,
+    // max: 82,
+    nodata: -9999
+  }],
+  projection: 'EPSG:3067',
+  normalize: false,
+  interpolate: false,
+});
 
-// const wcsSource = new ImageWMS({
-//   url: 'https://avoin-karttakuva.maanmittauslaitos.fi/ortokuvat-ja-korkeusmallit/wcs/v2?api-key=7cd2ddae-9f2e-481c-99d0-404e7bc7a0b2&service=WCS&version=2.0.1',
-//   params: {
-//     'LAYERS': 'korkeusmalli_2m',
-//     'format': 'image/tiff',
-//     'SubsettingCRS': 'EPSG:3857',
-//   },
-//   imageLoadFunction: (image, src) => {
-//     const extent = image.extent
-//     const url = `https://avoin-karttakuva.maanmittauslaitos.fi/ortokuvat-ja-korkeusmallit/wcs/v2?api-key=7cd2ddae-9f2e-481c-99d0-404e7bc7a0b2&service=WCS&version=2.0.1&request=GetCoverage&CoverageID=korkeusmalli_2m&SubsettingCRS=EPSG:3857&format=image/tiff&CRS=EPSG:3857&SUBSET=E(${extent[0]},${extent[2]})&SUBSET=N(${extent[1]},${extent[3]})`
-//     image.getImage().src = url;
-//   }
-// });
 
 const vinovaloLayer = new TileLayer({
   title: "Maastonmuodot",
   source: new XYZ({
       attribution: "Trailmap.fi",
       url: 'https://static.trailmap.fi/varjomap/{z}/{x}/{y}.png',
-      maxzoom: 14
-  })
+      maxZoom: 14
+  }),
+  visible: false,
+  opacity: 0.75,
 })
 
-// vinovaloLayer.on('prerender', (event) => {
+const combinedHillshadeLayer = new TileLayer({
+  title: "Combined Hillshade",
+  source: new XYZ({
+      url: './hillshade/{z}/{x}/{y}.png',
+      minZoom: 12,
+      maxZoom: 16
+  }),
+  visible: false,
+  opacity: 0.8,
+});
+
+// combinedHillshadeLayer.on('prerender', (event) => { // Could be used for multiply blending mode, but does not support WebGL layers under
+//   const ctx = event.context;
+//   ctx.globalCompositeOperation = 'multiply';
+// });
+
+// combinedHillshadeLayer.on('postrender', (event) => {
 //   const ctx = event.context;
 //   ctx.globalCompositeOperation = 'normal';
 // });
 
-// vinovaloLayer.on('postrender', (event) => {
-//   const ctx = event.context;
-//   ctx.globalCompositeOperation = 'normal';
-// });
+const getColorSteps = (min, max, steps) => {
+  const vars = {}
+  for (let i = 0; i < steps; i++) {
+    const step = min + (max - min) * (i / (steps - 1));
+    vars[`step${i}`] = step;
+  }
+  return vars
+}
 
-const dynamicTile = new WebGLTileLayer({
-  source: sampleTiff,
+const staticElevationLayer = new WebGLTileLayer({
+  source: U5111CTiff,
+  style: {
+    color: ['interpolate', ['linear'], ['band', 1], ['var', 'step0'], '#000082', ['var', 'step1'], '#3bd429', ['var', 'step2'], '#e6e632', ['var', 'step3'], '#784614', ['var', 'step4'], '#c6b19c',  ['var', 'step5'], '#ffffff'],
+    variables: getColorSteps(167, 208, 6), // apply static color steps
+  }
 })
-const dynamicSource = new RasterSource({
-  sources: [dynamicTile], 
+
+const continuouslyAdaptiveLayer = new WebGLTileLayer({
+  source: U4333GTiff,
+  style: {
+    color: ['interpolate', ['linear'], ['band', 1], ['var', 'step0'], '#000082', ['var', 'step1'], '#3bd429', ['var', 'step2'], '#e6e632', ['var', 'step3'], '#784614', ['var', 'step4'], '#c6b19c',  ['var', 'step5'], '#ffffff'],
+    variables: getColorSteps(25, 1500, 6), // apply initial color steps
+  }
+})
+
+const postMovementAdaptiveLayer = new WebGLTileLayer({
+  source: U4334GTiff,
+  style: {
+    color: ['interpolate', ['linear'], ['band', 1], ['var', 'step0'], '#000082', ['var', 'step1'], '#3bd429', ['var', 'step2'], '#e6e632', ['var', 'step3'], '#784614', ['var', 'step4'], '#c6b19c',  ['var', 'step5'], '#ffffff'],
+    variables: getColorSteps(25, 1500, 6), // apply initial color steps
+  }
+})
+
+const rasterOperationAdaptiveDataLayer = new WebGLTileLayer({
+  source: U5112CTiff,
+  style: { // RGB encode elevation values
+    color: ['color', ['floor', ['/', ['*', ['+', ['band', 1], 10000], 10], 256**2]], ['floor', ['/', ['%', ['*', ['+', ['band', 1], 10000], 10], 256**2], 256]], ['floor', ['%', ['*', ['+', ['band', 1], 10000], 10], 256]], 1],
+  },
+  visible: false,
+})
+
+const rasterOperationAdaptiveSource = new RasterSource({
+  sources: [rasterOperationAdaptiveDataLayer], 
   operationType: 'image',
   operation: (imageData, data) => {
     const elevationImage = imageData[0].data;
     const pixelCount = imageData[0].width * imageData[0].height;
-    let pixel, elevation, pixelValue;
+    let pixel
     const elevationData = new Array(pixelCount)
     let minE = 1667721.5, maxE = -10000;
-    console.log('elevationImage', elevationImage)
     
     // Korkeusarvojen purkaminen ja minimi- ja maksimiarvojen määrittäminen
     for (let i = 0; i < pixelCount; i++) {
@@ -274,11 +258,7 @@ const dynamicSource = new RasterSource({
     // Korkeusarvot luokkiin ja värit interpolointiin
     const elevationDisplayData = new Uint8ClampedArray(elevationImage.length);
     for (let i = 0; i < pixelCount; i++) {
-      elevationDisplayData[i*4] = elevationImage[i*4];
-      elevationDisplayData[i*4+1] = elevationImage[i*4+1];
-      elevationDisplayData[i*4+2] = elevationImage[i*4+2];
-      elevationDisplayData[i*4+3] = elevationImage[i*4+3];
-      continue
+
       if (elevationData[i] === -10000) {
         elevationDisplayData[i*4] = 0;  // Musta väri, jos NoData
         elevationDisplayData[i*4+1] = 0;
@@ -300,7 +280,6 @@ const dynamicSource = new RasterSource({
       const upperColor = colors[upperClass];
 
       // Interpoloidaan värit
-      debugger
       const weight = normalizedElevation * 14 - classIndex;
       const red = Math.round(lowerColor[0] * (1 - weight) + upperColor[0] * weight);
       const green = Math.round(lowerColor[1] * (1 - weight) + upperColor[1] * weight);
@@ -320,35 +299,10 @@ const dynamicSource = new RasterSource({
     scaleElevation: scaleElevation,
   }
 });
-const dynamicLayer = new ImageLayer({
-  source: dynamicSource,
-  visible: true,
+
+const rasterOperationAdaptiveLayer = new ImageLayer({
+  source: rasterOperationAdaptiveSource,
 })
-
-const getColorSteps = (min, max, steps) => {
-  const vars = {}
-  for (let i = 0; i < steps; i++) {
-    const step = min + (max - min) * (i / (steps - 1));
-    vars[`step${i}`] = step;
-  }
-  return vars
-}
-
-const tiffLayer = new WebGLTileLayer({
-  source: sampleTiff,
-  style: { // HUOMIO!! Tyylillä saadaan värjättyä geotiff, esim rgb enkoodatuksi
-    color: ['interpolate', ['linear'], ['band', 1], ['var', 'step0'], '#000082', ['var', 'step1'], '#3bd429', ['var', 'step2'], '#e6e632', ['var', 'step3'], '#784614', ['var', 'step4'], '#c6b19c',  ['var', 'step5'], '#ffffff'],
-    variables: getColorSteps(25, 82, 6),
-  }
-})
-
-// tiffLayer.on('postrender', (event) => {
-//   tiffLayer.getData().then((data) => {
-//     console.log(data)
-//   })
-// })
-
-
 
 const map = new Map({
   target: 'map',
@@ -356,61 +310,25 @@ const map = new Map({
     new TileLayer({
       source: new OSM()
     }),
-    // new TileLayer({
-    //   source: maastokarttaSource
-    // }),
-    // new TileLayer({ // Display the raw rgb dem tiles
-    //   source: elevation
-    // }),
-    new ImageLayer({
-      source: raster,
-    }),
-    // new TileLayer({ // Display the raw rgb dem tiles
-    //   source: elevation3067
-    // }),
-    new ImageLayer({
-      source: raster3067,
-    }),
-    // new WebGLTileLayer({
-    //   source: orthoTiff
-    // }),
-    // new WebGLTileLayer({ // Does not work
-    //   source: new GeoTIFF({
-    //     sources: [{
-    //       url: 'https://avoin-karttakuva.maanmittauslaitos.fi/ortokuvat-ja-korkeusmallit/wcs/v2?api-key=7cd2ddae-9f2e-481c-99d0-404e7bc7a0b2&service=WCS&version=2.0.1&request=GetCoverage&CoverageID=ortokuva_vari&SubsettingCRS=EPSG:3857&format=image/tiff&CRS=EPSG:3857&SUBSET=E(2564768.8175240895,2566696.1461528568)&SUBSET=N(9136905.97726411,9138297.617682349)',
-    //       min: 50,
-    //       max: 65
-    //     }]
-    //   }),
-    // })
-    // new ImageLayer({
-    //   source: wcsSource
-    // }),
-    tiffLayer,
-    // new WebGLTileLayer({
-    //   source: korkeusTiff,
-    //   style: { // HUOMIO!! Tyylillä saadaan värjättyä geotiff, esim rgb enkoodatuksi
-    //     color: ['interpolate', ['linear'], ['band', 1], 25, '#000082', 35, '#3bd429', 45, '#e6e632', 55, '#784614', 65, '#c6b19c',  82, '#ffffff']
-    //   }
-    // }),
-    //vinovaloLayer,
-    //dynamicLayer,
+    staticElevationLayer,
+    continuouslyAdaptiveLayer,
+    postMovementAdaptiveLayer,
+    rasterOperationAdaptiveDataLayer,
+    rasterOperationAdaptiveLayer,
+    combinedHillshadeLayer,
+    vinovaloLayer,
   ],
   view: new View({
-    //center: [2566000, 9138000],
-    zoom: 14,
-    center: [300000, 6993000],
+    zoom: 13,
+    center: [503000, 7443000],
     projection: 'EPSG:3067'
   })
 });
 
-map.on('click', (event) => {
-  console.log(event.coordinate)
-  console.log('extent', tiffLayer.getExtent())
-  console.log(tiffLayer.getData(event.pixel))
-})
+const link = new Link() // Track map state in the URL
+map.addInteraction(link);
 
-const getVisibleMinMax = () => {
+const getVisibleMinMax = (layer) => {
   const mapSize = map.getSize();
   if (!mapSize || mapSize[0] === 0 || mapSize[1] === 0) {
     return;
@@ -421,7 +339,7 @@ const getVisibleMinMax = () => {
   for (let x = 0; x < mapSize[0]; x += decimationStep) {
     for (let y = 0; y < mapSize[1]; y += decimationStep) {
       const pixel = [x, y];
-      const data = tiffLayer.getData(pixel);
+      const data = layer.getData(pixel);
       if (data) {
         min = Math.min(min, data[0]);
         max = Math.max(max, data[0]);
@@ -429,15 +347,71 @@ const getVisibleMinMax = () => {
     }
   }
   if (min < max) {
-    tiffLayer.updateStyleVariables(getColorSteps(min, max, 6));
+    layer.updateStyleVariables(getColorSteps(min, max, 6));
   }
 }
 
-// map.on('moveend', (event) => {
-//   tiffLayer.once('prerender', (event) => {
-//     getVisibleMinMax()
-//   })
-// })
-tiffLayer.on('prerender', (event) => {
-    getVisibleMinMax()
+continuouslyAdaptiveLayer.on('prerender', (event) => {
+  getVisibleMinMax(continuouslyAdaptiveLayer)
+})
+
+map.on('moveend', () => {
+  postMovementAdaptiveLayer.once('prerender', () => {
+    getVisibleMinMax(postMovementAdaptiveLayer)
   })
+})
+
+const hillshadeButton = document.createElement('button');
+hillshadeButton.textContent = 'Show combined hillshade';
+hillshadeButton.style.position = 'absolute';
+hillshadeButton.style.top = '10px';
+hillshadeButton.style.right = '10px';
+hillshadeButton.style.zIndex = 1000;
+document.body.appendChild(hillshadeButton);
+
+let hillshadeState = 0; // 0: none, 1: combined, 2: vinovalo
+
+const updateHillshade = () => {
+  combinedHillshadeLayer.setVisible(hillshadeState === 1);
+  vinovaloLayer.setVisible(hillshadeState === 2);
+  if (hillshadeState === 0) {
+    hillshadeButton.textContent = 'Show combined hillshade';
+  } else if (hillshadeState === 1) {
+    hillshadeButton.textContent = 'Show directional hillshade';
+  } else {
+    hillshadeButton.textContent = 'Hide hillshade';
+  }
+};
+
+hillshadeButton.addEventListener('click', () => {
+  hillshadeState = (hillshadeState + 1) % 3;
+  updateHillshade();
+});
+
+// Initialize state
+combinedHillshadeLayer.setVisible(false);
+vinovaloLayer.setVisible(false);
+updateHillshade();
+
+const rasterSwitchButton = document.createElement('button');
+rasterSwitchButton.textContent = 'Show intermediate RGB DEM';
+rasterSwitchButton.style.position = 'absolute';
+rasterSwitchButton.style.top = '40px';
+rasterSwitchButton.style.right = '10px';
+rasterSwitchButton.style.zIndex = 1000;
+document.body.appendChild(rasterSwitchButton);
+
+let showingProcessed = true;
+
+rasterSwitchButton.addEventListener('click', () => {
+  if (showingProcessed) {
+    rasterOperationAdaptiveLayer.setVisible(false);
+    rasterOperationAdaptiveDataLayer.setVisible(true);
+    rasterSwitchButton.textContent = 'Show elevation';
+  } else {
+    rasterOperationAdaptiveLayer.setVisible(true);
+    rasterOperationAdaptiveDataLayer.setVisible(false);
+    rasterSwitchButton.textContent = 'Show RGB DEM';
+  }
+  showingProcessed = !showingProcessed;
+});
