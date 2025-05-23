@@ -1,7 +1,17 @@
 # Dynamic raster color with OpenLayers
 
-A simple web application demo built with OpenLayers. Uses Raster source to dynamically scale the colors to cover the visible value range.
+A simple web application demo built with OpenLayers. Showcases different approaches for adaptive colorization of data with OpenLayers.
 
+The [demo application](https://jarvena.github.io/ol-demview) shows four examples, which of three are adaptive.  
+All the alternatives load data from COG, and map the elevation values to color range.
+
+![A screenshot of the demo view](four_samples.png)
+- The top-left is adaptive, updating the colour range once map movements finish. Utilizes webgl for colour mapping
+- The top-right is adaptive, updating the colour range once map movements finish. Utilizes webgl to encode elevation to rgb format, and OpenLayers raster source for colour mapping
+- The bottom-left is adaptive, updating the colour range continuously. Utilizes webgl
+- The bottom-right is static.
+
+The application has simple buttons in top-right corner for enabling hillshade, and visualizing the intermediate rgb-dem instead of the adaptive colorization result. 
 
 ## Built with OpenLayers + Vite
 
